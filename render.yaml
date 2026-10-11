@@ -1,0 +1,108 @@
+# Render Blueprint — TMS Task Management System (production)
+# Postgres-only primary DB, JWT-only auth, S3/R2 attachments.
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  # ── Backend — FastAPI + asyncpg (pooled) ──
+  - type: web
+    name: tms-backend
+    runtime: python
+    region: singapore
+    plan: starter
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 2 --bind 0.0.0.0:$PORT --timeout 60 --keep-alive 5 --graceful-timeout 30
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+      # REQUIRED — set from the tms-db database below (sync URL is fine; the
+      # app converts to the asyncpg driver automatically)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tms-db
+          property: connectionString
+      # REQUIRED — strong JWT secret; do NOT use the generated placeholder forever.
+      - key: SECRET_KEY
+        generateValue: true   # or set manually: openssl rand -hex 32
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_MINUTES
+        value: "480"
+      - key: ALLOWED_ORIGINS
+        value: https://tms-task-mangement-system.vercel.app,http://localhost:5173
+      - key: FRONTEND_URL
+        value: https://tms-task-mangement-system.vercel.app
+      # ── Object storage (Cloudflare R2 / S3-compatible) — set in Dashboard ──
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_REGION
+        value: auto
+      # ── Optional integrations (set in Dashboard) ──
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash-lite
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: MASTER_USER
+        sync: false
+      - key: MASTER_PASSWORD
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      # Google Sheets — optional EXPORT/MIRROR only (never a primary DB)
+      - key: GOOGLE_SHEETS_SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_SHEETS_WORKSHEET_NAME
+        value: Adroit-Action-Sheet
+      - key: GOOGLE_SHEETS_CREDENTIALS_JSON
+        sync: false
+
+  # ── Frontend — Vite React 19 (Static Site) ──
+  - type: web
+    name: tms-frontend
+    runtime: static
+    region: singapore
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://tms-backend.onrender.com
+      - key: VITE_SENTRY_DSN
+        sync: false
+      # NOTE: VITE_API_KEY is REMOVED — auth is JWT-only.
+
+databases:
+  - name: tms-db
+    plan: starter
+    databaseName: tmsdb
+    user: tms
+    region: singapore

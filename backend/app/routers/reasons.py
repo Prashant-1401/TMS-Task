@@ -1,0 +1,77 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+import datetime
+from sqlalchemy import select
+from app.database import get_db
+from app.models.models import Reason
+from app.schemas.schemas import ReasonCreate, ReasonUpdate
+from app.middleware.auth import require_auth
+
+router = APIRouter(prefix="/api/reasons", tags=["Reasons"], dependencies=[Depends(require_auth)])
+
+
+@router.get("/")
+async def list_reasons(category: str = None, db: AsyncSession = Depends(get_db)):
+    q = select(Reason).where(Reason.is_deleted.is_(False))
+    if category:
+        q = q.where(Reason.category == category)
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+@router.get("/{reason_id}")
+async def get_reason(reason_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Reason).where(Reason.is_deleted.is_(False)).where(Reason.id == reason_id))
+    reason = result.scalar_one_or_none()
+    if not reason:
+        raise HTTPException(status_code=404, detail="Reason not found")
+    return reason
+
+
+@router.post("/")
+async def create_reason(data: ReasonCreate, db: AsyncSession = Depends(get_db)):
+    reason = Reason(**data.model_dump())
+    db.add(reason)
+    await db.commit()
+    await db.refresh(reason)
+    return reason
+
+
+@router.patch("/{reason_id}")
+async def update_reason(reason_id: str, data: ReasonUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Reason).where(Reason.is_deleted.is_(False)).where(Reason.id == reason_id))
+    reason = result.scalar_one_or_none()
+    if not reason:
+        raise HTTPException(status_code=404, detail="Reason not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(reason, k, v)
+    await db.commit()
+    await db.refresh(reason)
+    return reason
+
+
+@router.delete("/{reason_id}")
+async def delete_reason(reason_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Reason).where(Reason.is_deleted.is_(False)).where(Reason.id == reason_id))
+    reason = result.scalar_one_or_none()
+    if not reason:
+        raise HTTPException(status_code=404, detail="Reason not found")
+    reason.is_deleted = True
+    reason.deleted_at = datetime.datetime.now(datetime.timezone.utc)
+    await db.commit()
+    return {"ok": True}
+
+@router.post("/bulk")
+async def bulk_upsert_reasons(rows: list[ReasonCreate], db: AsyncSession = Depends(get_db)):
+    upserted = 0
+    for data in rows:
+        result = await db.execute(select(Reason).where(Reason.id == data.id))
+        existing = result.scalar_one_or_none()
+        if existing:
+            for k, v in data.model_dump(exclude_unset=True).items():
+                setattr(existing, k, v)
+        else:
+            db.add(Reason(**data.model_dump()))
+        upserted += 1
+    await db.commit()
+    return {"ok": True, "upserted": upserted}

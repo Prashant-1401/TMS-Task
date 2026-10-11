@@ -1,0 +1,84 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+import datetime
+from sqlalchemy import select
+from app.database import get_db
+from app.models.models import Machine
+from app.schemas.schemas import MachineCreate, MachineUpdate
+from app.middleware.auth import require_auth, get_current_user
+from app.services.plant_scoping import scope_by_plant
+
+router = APIRouter(prefix="/api/machines", tags=["Machines"], dependencies=[Depends(require_auth)])
+
+
+@router.get("/")
+async def list_machines(plant_id: str = None, dept_id: str = None, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    q = select(Machine).where(Machine.is_deleted.is_(False))
+    if plant_id:
+        q = q.where(Machine.plant_id == plant_id)
+    if dept_id:
+        q = q.where(Machine.dept_id == dept_id)
+    q = scope_by_plant(q, current_user, Machine.plant_id)
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+@router.get("/{machine_id}")
+async def get_machine(machine_id: str, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    q = scope_by_plant(select(Machine).where(Machine.is_deleted.is_(False)), current_user, Machine.plant_id)
+    q = q.where(Machine.id == machine_id)
+    result = await db.execute(q)
+    machine = result.scalar_one_or_none()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    return machine
+
+
+@router.post("/")
+async def create_machine(data: MachineCreate, db: AsyncSession = Depends(get_db)):
+    machine = Machine(**data.model_dump())
+    db.add(machine)
+    await db.commit()
+    await db.refresh(machine)
+    return machine
+
+
+@router.patch("/{machine_id}")
+async def update_machine(machine_id: str, data: MachineUpdate, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Machine).where(Machine.is_deleted.is_(False)).where(Machine.id == machine_id))
+    machine = result.scalar_one_or_none()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(machine, k, v)
+    await db.commit()
+    await db.refresh(machine)
+    return machine
+
+
+@router.delete("/{machine_id}")
+async def delete_machine(machine_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Machine).where(Machine.is_deleted.is_(False)).where(Machine.id == machine_id))
+    machine = result.scalar_one_or_none()
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    machine.is_deleted = True
+    machine.deleted_at = datetime.datetime.now(datetime.timezone.utc)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/bulk")
+async def bulk_upsert_machines(rows: list[MachineCreate], db: AsyncSession = Depends(get_db)):
+    upserted = 0
+    for data in rows:
+        result = await db.execute(select(Machine).where(Machine.id == data.id))
+        existing = result.scalar_one_or_none()
+        if existing:
+            for k, v in data.model_dump(exclude_unset=True).items():
+                setattr(existing, k, v)
+        else:
+            db.add(Machine(**data.model_dump()))
+        upserted += 1
+    await db.commit()
+    return {"ok": True, "upserted": upserted}
