@@ -80,7 +80,6 @@ services:
   - type: web
     name: tms-frontend
     runtime: static
-    region: singapore
     plan: free
     rootDir: .
     buildCommand: npm install && npm run build
