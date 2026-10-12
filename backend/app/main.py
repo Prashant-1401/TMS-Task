@@ -4,6 +4,7 @@ Postgres is the only primary database. Google Sheets remains an optional
 export/mirror. All endpoints are JWT-authenticated.
 """
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -33,6 +34,25 @@ settings.validate_security()
 setup_logging(settings.log_level)
 
 
+async def _run_migrations() -> None:
+    """Apply Alembic migrations at startup (idempotent — a no-op when current)."""
+    import asyncio
+    from alembic.config import Config as AlembicConfig
+    from alembic import command as alembic_command
+
+    def _upgrade() -> None:
+        cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
+        cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "migrations"))
+        alembic_command.upgrade(cfg, "head")
+
+    try:
+        await asyncio.to_thread(_upgrade)
+        logger.info("startup: database schema is up to date (alembic head)")
+    except Exception as e:
+        logger.error(f"startup: alembic migration failed: {e}")
+        raise
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup: verifying database connectivity")
@@ -40,6 +60,7 @@ async def lifespan(app: FastAPI):
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         logger.info("database connection OK")
+        await _run_migrations()
     except Exception as e:
         logger.error(f"database connectivity check failed: {e}")
         raise RuntimeError(
