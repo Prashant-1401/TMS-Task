@@ -430,14 +430,14 @@ async def import_master(kind: str, file: UploadFile = File(...), db: AsyncSessio
         nonlocal created, updated
         q = select(model)
         for a, v in zip(key_attrs, key_vals):
-            q = q.where(getattr(model, a) == v)
+            q = q.where(a == v)
         obj = (await db.execute(q)).scalar_one_or_none()
         if obj:
             for k, v in payload.items():
                 setattr(obj, k, v)
             updated += 1
         else:
-            db.add(model(**payload)); created += 1
+            db.add(model(**{"id": str(uuid.uuid4()), **payload})); created += 1
 
     plants = {p.name: p.id for p in (await db.execute(select(Plant))).scalars() if p.name}
     depts = {d.name: d.id for d in (await db.execute(select(Department))).scalars() if d.name}
