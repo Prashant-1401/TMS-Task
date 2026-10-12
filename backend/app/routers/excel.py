@@ -284,3 +284,248 @@ async def import_users(
         created += 1
     await db.commit()
     return {"ok": True, "created": created, "updated": updated, "errors": errors[:50]}
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Generic Master Setup Excel — plants, depts, machines, roles, escalation
+# matrix, meeting presets. Admin-only (export + import). Header-name based.
+# Imports are upserts: match on the natural key, update if found, else create.
+# ════════════════════════════════════════════════════════════════════════
+import json as _json
+
+from app.models.models import Role, Machine, MeetingPreset, EscalationMatrix
+
+def _admin_guard(current_user: dict = Depends(get_current_user)):
+    _require_admin(current_user)
+
+
+master_excel = APIRouter(
+    prefix="/api/master/excel",
+    tags=["Excel"],
+    dependencies=[Depends(require_auth), Depends(_admin_guard)],
+)
+
+
+def _bool(v, default=True) -> bool:
+    s = str(v if v is not None else "").strip().upper()
+    return default if s == "" else s not in ("NO", "FALSE", "0", "N")
+
+
+async def _names(db, model, key="name"):
+    return {o.id: getattr(o, key) for o in (await db.execute(select(model))).scalars()}
+
+
+@master_excel.get("/{kind}/export")
+async def export_master(kind: str, db: AsyncSession = Depends(get_db)):
+    kind = kind.lower()
+    wb = Workbook(); wb.remove(wb.active)
+    if kind == "plants":
+        ws = wb.create_sheet("Plants"); _hdr(ws, ["Name", "Location", "Head"])
+        for p in sorted((await db.execute(select(Plant))).scalars(), key=lambda x: (x.name or "")):
+            ws.append([p.name, p.location, p.head])
+        return _sheet_response(wb, "plants.xlsx")
+    if kind == "depts":
+        plants = await _names(db, Plant)
+        ws = wb.create_sheet("Departments"); _hdr(ws, ["Name", "Plant", "Head", "Icon"])
+        for d in sorted((await db.execute(select(Department))).scalars(), key=lambda x: (x.name or "")):
+            ws.append([d.name, plants.get(d.plant_id), d.head, d.icon])
+        return _sheet_response(wb, "departments.xlsx")
+    if kind == "machines":
+        plants, depts = await _names(db, Plant), await _names(db, Department)
+        ws = wb.create_sheet("Machines"); _hdr(ws, ["Name", "Plant", "Dept", "Type", "Asset No", "Active"])
+        for m in sorted((await db.execute(select(Machine))).scalars(), key=lambda x: (x.name or "")):
+            ws.append([m.name, plants.get(m.plant_id), depts.get(m.dept_id), m.type, m.asset_no, "YES" if m.is_active else "NO"])
+        return _sheet_response(wb, "machines.xlsx")
+    if kind == "roles":
+        ws = wb.create_sheet("Roles"); _hdr(ws, ["Name", "Level"])
+        for r in sorted((await db.execute(select(Role))).scalars(), key=lambda x: (x.level, x.name or "")):
+            ws.append([r.name, r.level])
+        return _sheet_response(wb, "roles.xlsx")
+    if kind == "escmatrix":
+        ws = wb.create_sheet("Escalation Matrix")
+        _hdr(ws, ["Level", "Label", "From User", "Target User", "From Role", "Target Role",
+                  "Overdue Days", "Overdue Hrs", "Notify Method", "Applicable To",
+                  "Priorities", "Color", "Active", "Description"])
+        for e in sorted((await db.execute(select(EscalationMatrix))).scalars(), key=lambda x: (x.level or 0)):
+            ws.append([e.level, e.label, e.from_user, e.target_user, e.from_role, e.target_role,
+                       e.overdue_days, e.overdue_hrs, e.notify_method, e.applicable_to,
+                       ", ".join(e.priorities or []) if isinstance(e.priorities, list) else e.priorities,
+                       e.color, "YES" if e.active else "NO", e.description])
+        return _sheet_response(wb, "escalation-matrix.xlsx")
+    if kind == "presets":
+        ws = wb.create_sheet("Meeting Presets"); _hdr(ws, ["Type", "Attendees", "Instructions"])
+        for p in sorted((await db.execute(select(MeetingPreset))).scalars(), key=lambda x: (x.type or "")):
+            att = p.attendees if isinstance(p.attendees, str) else "; ".join(p.attendees or [])
+            ins = p.instructions if isinstance(p.instructions, str) else "; ".join(f"{k}={v}" for k, v in (p.instructions or {}).items())
+            ws.append([p.type, att, ins])
+        return _sheet_response(wb, "meeting-presets.xlsx")
+    raise HTTPException(404, f"Unknown master kind '{kind}'")
+
+
+def _split_list(v):
+    if v in (None, ""):
+        return []
+    if isinstance(v, (list, tuple)):
+        return [str(x).strip() for x in v if str(x).strip()]
+    s = str(v).strip()
+    if s.startswith("["):
+        try:
+            return [str(x).strip() for x in _json.loads(s)]
+        except Exception:
+            pass
+    return [p.strip() for p in s.replace(";", ",").split(",") if p.strip()]
+
+
+def _kv(v):
+    if v in (None, ""):
+        return {}
+    if isinstance(v, dict):
+        return v
+    s = str(v).strip()
+    if s.startswith("{"):
+        try:
+            return _json.loads(s)
+        except Exception:
+            pass
+    out = {}
+    for part in s.replace(";", "|").split("|"):
+        if "=" in part:
+            k, _, val = part.partition("=")
+            if k.strip():
+                out[k.strip()] = val.strip()
+    return out
+
+
+def _int(v):
+    try:
+        return int(str(v).strip())
+    except Exception:
+        return None
+
+
+@master_excel.post("/{kind}/import")
+async def import_master(kind: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    kind = kind.lower()
+    if not file.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(400, "Upload an .xlsx file")
+    wb = load_workbook(io.BytesIO(await file.read()), data_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(400, "Empty sheet")
+    headers = [str(h or "").strip().lower() for h in rows[0]]
+    col = {h: i for i, h in enumerate(headers)}
+
+    def val(r, *names, default=None):
+        for n in names:
+            if n.lower() in col:
+                v = _cell(r[col[n.lower()]])
+                if v not in (None, ""):
+                    return v
+        return default
+
+    created, updated, errors = 0, 0, []
+
+    async def upsert(model, key_attrs, key_vals, payload):
+        nonlocal created, updated
+        q = select(model)
+        for a, v in zip(key_attrs, key_vals):
+            q = q.where(getattr(model, a) == v)
+        obj = (await db.execute(q)).scalar_one_or_none()
+        if obj:
+            for k, v in payload.items():
+                setattr(obj, k, v)
+            updated += 1
+        else:
+            db.add(model(**payload)); created += 1
+
+    plants = {p.name: p.id for p in (await db.execute(select(Plant))).scalars() if p.name}
+    depts = {d.name: d.id for d in (await db.execute(select(Department))).scalars() if d.name}
+
+    for idx, r in enumerate(rows[1:], start=2):
+        if all(v in (None, "") for v in r):
+            continue
+        try:
+            if kind == "plants":
+                name = val(r, "name")
+                if not name:
+                    errors.append(f"Row {idx}: missing 'Name'"); continue
+                await upsert(Plant, [Plant.name], [name],
+                             {"id": plants.get(name) or str(uuid.uuid4()), "name": name,
+                              "location": val(r, "location"), "head": val(r, "head", "plant head")})
+            elif kind == "depts":
+                name, pname = val(r, "name"), val(r, "plant")
+                if not name:
+                    errors.append(f"Row {idx}: missing 'Name'"); continue
+                pid = plants.get(pname) if pname else None
+                if pname and not pid:
+                    errors.append(f"Row {idx}: unknown plant '{pname}'"); continue
+                key = select(Department).where(Department.name == name, Department.plant_id == pid)
+                obj = (await db.execute(key)).scalar_one_or_none()
+                data = {"name": name, "plant_id": pid, "head": val(r, "head", "department head"), "icon": val(r, "icon")}
+                if obj:
+                    for k, v in data.items(): setattr(obj, k, v); 
+                    updated += 1
+                else:
+                    db.add(Department(id=str(uuid.uuid4()), **data)); created += 1
+            elif kind == "machines":
+                name, pname = val(r, "name"), val(r, "plant")
+                if not name:
+                    errors.append(f"Row {idx}: missing 'Name'"); continue
+                pid = plants.get(pname) if pname else None
+                if pname and not pid:
+                    errors.append(f"Row {idx}: unknown plant '{pname}'"); continue
+                dname = val(r, "dept", "department")
+                did = depts.get(dname) if dname else None
+                if dname and not did:
+                    errors.append(f"Row {idx}: unknown dept '{dname}'"); continue
+                await upsert(Machine, [Machine.name, Machine.plant_id], [name, pid],
+                             {"name": name, "plant_id": pid, "dept_id": did,
+                              "type": val(r, "type"), "asset_no": val(r, "asset no", "asset_no", "assetno"),
+                              "is_active": _bool(val(r, "active"), True)})
+            elif kind == "roles":
+                name = val(r, "name", "role")
+                if not name:
+                    errors.append(f"Row {idx}: missing 'Name'"); continue
+                level = _int(val(r, "level")) or 1
+                await upsert(Role, [Role.name], [name], {"name": name, "level": level})
+            elif kind == "escmatrix":
+                level = _int(val(r, "level"))
+                if level is None:
+                    errors.append(f"Row {idx}: missing/invalid 'Level'"); continue
+                data = {
+                    "level": level, "label": val(r, "label"), "from_user": val(r, "from user", "from_user"),
+                    "target_user": val(r, "target user", "target_user"), "from_role": val(r, "from role", "from_role"),
+                    "target_role": val(r, "target role", "target_role"), "overdue_days": _int(val(r, "overdue days")),
+                    "overdue_hrs": _int(val(r, "overdue hrs")), "notify_method": val(r, "notify method", "notify_method"),
+                    "applicable_to": val(r, "applicable to", "applicable_to"),
+                    "priorities": _split_list(val(r, "priorities")) or None,
+                    "color": val(r, "color"), "active": _bool(val(r, "active"), True),
+                    "description": val(r, "description"),
+                }
+                obj = (await db.execute(select(EscalationMatrix).where(EscalationMatrix.level == level))).scalar_one_or_none()
+                if obj:
+                    for k, v in data.items(): setattr(obj, k, v)
+                    updated += 1
+                else:
+                    db.add(EscalationMatrix(id=str(uuid.uuid4()), **data)); created += 1
+            elif kind == "presets":
+                ptype = val(r, "type")
+                if not ptype:
+                    errors.append(f"Row {idx}: missing 'Type'"); continue
+                obj = (await db.execute(select(MeetingPreset).where(MeetingPreset.type == ptype))).scalar_one_or_none()
+                data = {"type": ptype, "attendees": _split_list(val(r, "attendees")) or None,
+                        "instructions": _kv(val(r, "instructions")) or None}
+                if obj:
+                    for k, v in data.items(): setattr(obj, k, v)
+                    updated += 1
+                else:
+                    db.add(MeetingPreset(**data)); created += 1
+            else:
+                raise HTTPException(404, f"Unknown master kind '{kind}'")
+        except HTTPException:
+            raise
+        except Exception as e:
+            errors.append(f"Row {idx}: {str(e)[:120]}")
+    await db.commit()
+    return {"ok": True, "created": created, "updated": updated, "errors": errors[:50]}

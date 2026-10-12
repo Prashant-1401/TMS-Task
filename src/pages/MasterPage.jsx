@@ -259,6 +259,7 @@ export function MasterPage({ user, plants, setPlants, depts, setDepts, users, se
       {/* ── PLANTS ── */}
       {tab === "plants" && <>
         <SectionHeader title="Plants" sub="Manufacturing plant locations" onAdd={isMasterOnly ? null : () => openAdd("plants")} onSave={isMasterOnly ? null : () => saveToAPI("Plants", plants)} />
+        {isAdmin && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}><ExcelIO kind="plants" onImported={_refreshMaster} /></div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
           {mPlants.map(p => <div key={p.id} className="card" style={{ padding: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><span style={{ fontSize: 26 }}>🏭</span>{canModify("plants", p.id) && <div><button className="btn btn-ghost btn-sm" onClick={() => openEdit("plants", p)}>Edit</button><button className="btn btn-ghost btn-sm" style={{ color: T.red, marginLeft: 4 }} onClick={() => { if (window.confirm(`Remove plant "${p.name}"?`)) { setPlants(prev => prev.filter(x => x.id !== p.id)); apiRemove("plants", p.id); } }}>✕</button></div>}</div>
@@ -273,6 +274,7 @@ export function MasterPage({ user, plants, setPlants, depts, setDepts, users, se
       {/* ── DEPARTMENTS ── */}
       {tab === "depts" && <>
         <SectionHeader title="Departments" sub={isMasterOnly ? `Departments in ${myPlant}` : "Sections within each plant"} onAdd={() => openAdd("depts")} onSave={() => saveToAPI("Departments", mDepts)} />
+        {isAdmin && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}><ExcelIO kind="depts" onImported={_refreshMaster} /></div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(190px,1fr))", gap: 14 }}>
           {(mDepts || []).map(d => <div key={d.id} className="card" style={{ padding: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><span style={{ fontSize: 26 }}>{d.icon || "🗂"}</span>{canModify("depts", d.id) && <div><button className="btn btn-ghost btn-sm" onClick={() => openEdit("depts", d)}>Edit</button><button className="btn btn-ghost btn-sm" style={{ color: T.red, marginLeft: 4 }} onClick={() => { if (window.confirm(`Remove department "${d.name}"?`)) { setDepts(prev => prev.filter(x => x.id !== d.id)); apiRemove("departments", d.id); } }}>✕</button></div>}</div>
@@ -287,6 +289,7 @@ export function MasterPage({ user, plants, setPlants, depts, setDepts, users, se
       {/* ── MACHINES ── */}
       {tab === "machines" && <>
         <SectionHeader title="Machines" sub={isMasterOnly ? `Machines in ${myPlant}` : "Registered equipment across all plants"} onAdd={() => openAdd("machines")} onSave={() => saveToAPI("Machines", (mMachines || []))} />
+        {isAdmin && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}><ExcelIO kind="machines" onImported={_refreshMaster} /></div>}
         {/* Mobile cards */}
         <div style={{ display: "none" }} className="master-mobile-cards">
           {(mMachines || []).map(m => (
@@ -332,6 +335,7 @@ export function MasterPage({ user, plants, setPlants, depts, setDepts, users, se
       {/* ── ROLES ── */}
       {tab === "roles" && <>
         <SectionHeader title="Roles" sub="System roles and access levels" onAdd={isAdmin ? () => openAdd("roles") : null} onSave={isAdmin ? () => saveToAPI("Roles", roles) : null} />
+        {isAdmin && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}><ExcelIO kind="roles" onImported={_refreshMaster} /></div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 14 }}>
           {roles.map(r => <div key={r.id} className="card" style={{ padding: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -352,17 +356,19 @@ export function MasterPage({ user, plants, setPlants, depts, setDepts, users, se
       {tab === "team" && <TeamPage users={users} actions={actions} escMatrix={escMatrix} plants={plants} depts={depts} user={user} isAdmin={isAdmin} setActions={setActions} />}
 
       {/* ── ESCALATION MATRIX ── */}
-      {tab === "escmatrix" && <EscMatrixTab escMatrix={mEscMatrix || []} setEscMatrix={setEscMatrix} onSave={() => saveToAPI("EscalationMatrix", mEscMatrix || [])} isAdmin={isAdmin} canModify={canModify} users={mUsers} roles={roles} />}
+      {tab === "escmatrix" && <>{isAdmin && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}><ExcelIO kind="escmatrix" onImported={_refreshMaster} /></div>}<EscMatrixTab escMatrix={mEscMatrix || []} setEscMatrix={setEscMatrix} onSave={() => saveToAPI("EscalationMatrix", mEscMatrix || [])} isAdmin={isAdmin} canModify={canModify} users={mUsers} roles={roles} />}</>}
 
       {/* ── MEETING PRESETS ── */}
       {tab === "presets" && <div className="card" style={{ padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "nowrap", overflowX: "auto", gap: 10, marginBottom: 16 }}>
           <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 15, color: T.navy }}>Meeting Presets</div>
-          <SectionSaveButton onSave={() => {
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {isAdmin && <ExcelIO kind="presets" onImported={_refreshMaster} />}
+            <SectionSaveButton onSave={() => {
             const allTypes = Array.from(new Set([...Object.keys(mtgPresets.attendeeMap || {}), ...Object.keys(mtgPresets.instructions || {})]));
             const rows = allTypes.map(t => ({ type: t, attendees: ensureArray((mtgPresets.attendeeMap || {})[t]), instructions: ensureArray((mtgPresets.instructions || {})[t]) }));
             return saveToAPI("MeetingPresets", rows);
-          }} />
+          }} /></div>
         </div>
         <div style={{ display: "grid", gap: 16 }}>
           {MEETING_TYPES.map(type => (

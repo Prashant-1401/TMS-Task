@@ -29,14 +29,24 @@ async function downloadExcel(path, filename) {
   URL.revokeObjectURL(url);
 }
 
-/** Import/Export buttons for Actions and Users (Admin Panel).
- *  kind: "actions" | "users"
+/** Import/Export buttons for Actions and the Admin Panel master sections.
+ *  kind: actions | users | plants | depts | machines | roles | escmatrix | presets
  */
+const KINDS = {
+  actions:   { url: "/api/actions/excel", file: "actions.xlsx", label: "action(s)" },
+  users:     { url: "/api/users/excel", file: "users.xlsx", label: "user(s)" },
+  plants:    { url: "/api/master/excel/plants", file: "plants.xlsx", label: "plant(s)" },
+  depts:     { url: "/api/master/excel/depts", file: "departments.xlsx", label: "department(s)" },
+  machines:  { url: "/api/master/excel/machines", file: "machines.xlsx", label: "machine(s)" },
+  roles:     { url: "/api/master/excel/roles", file: "roles.xlsx", label: "role(s)" },
+  escmatrix: { url: "/api/master/excel/escmatrix", file: "escalation-matrix.xlsx", label: "escalation row(s)" },
+  presets:   { url: "/api/master/excel/presets", file: "meeting-presets.xlsx", label: "preset(s)" },
+};
 export function ExcelIO({ kind, onImported }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const fileRef = useRef(null);
-  const isActions = kind === "actions";
+  const spec = KINDS[kind] || KINDS.actions;
 
   const doImport = async file => {
     if (!file) return;
@@ -45,14 +55,12 @@ export function ExcelIO({ kind, onImported }) {
       const token = getAuthToken() || localStorage.getItem("mcs_token");
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch(`${API_BASE_URL}${isActions ? "/api/actions/excel/import" : "/api/users/excel/import"}`, {
+      const res = await fetch(`${API_BASE_URL}${spec.url}/import`, {
         method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: fd,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `Import failed (${res.status})`);
-      const summary = isActions
-        ? `Imported ${data.created} action(s)`
-        : `Imported ${data.created} user(s)`;
+      const summary = `Imported: ${data.created || 0} new, ${data.updated || 0} updated ${spec.label}`;
       const errs = (data.errors || []).length ? ` — ${data.errors.length} warning(s): ${data.errors.slice(0, 3).join("; ")}` : "";
       setMsg({ ok: true, text: summary + errs });
       onImported?.();
@@ -68,8 +76,8 @@ export function ExcelIO({ kind, onImported }) {
     <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <button type="button" style={btnStyle} disabled={busy}
         onClick={() => downloadExcel(
-          isActions ? "/api/actions/excel/export" : "/api/users/excel/export",
-          isActions ? "actions.xlsx" : "users.xlsx",
+          `${spec.url}/export`,
+          spec.file,
         ).catch(e => setMsg({ ok: false, text: e.message }))}>
         ⬇ Export Excel
       </button>
