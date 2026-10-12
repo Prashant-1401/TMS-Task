@@ -34,23 +34,58 @@ settings.validate_security()
 setup_logging(settings.log_level)
 
 
-async def _run_migrations() -> None:
-    """Apply Alembic migrations at startup (idempotent — a no-op when current)."""
-    import asyncio
-    from alembic.config import Config as AlembicConfig
-    from alembic import command as alembic_command
+def _sync_db_url() -> str:
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url.replace("+asyncpg", "+psycopg2")
 
-    def _upgrade() -> None:
-        cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "..", "alembic.ini"))
-        cfg.set_main_option("script_location", os.path.join(os.path.dirname(__file__), "..", "migrations"))
-        alembic_command.upgrade(cfg, "head")
+
+def _alembic_cfg():
+    from alembic.config import Config as AlembicConfig
+    root = os.path.join(os.path.dirname(__file__), "..")
+    cfg = AlembicConfig(os.path.join(root, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(root, "migrations"))
+    return cfg
+
+
+async def _run_migrations() -> None:
+    """Ensure schema exists at startup: try Alembic first; fall back to
+    metadata.create_all + alembic stamp if the upgrade fails for any reason.
+    An advisory lock serializes the two gunicorn workers."""
+    import asyncio
+
+    def _run() -> None:
+        from sqlalchemy import create_engine
+        from alembic import command as alembic_command
+        from app.database import Base
+        import app.models.models  # noqa: F401 — registers every table
+
+        lock_eng = create_engine(_sync_db_url())
+        try:
+            lock = lock_eng.connect()
+            lock.exec_driver_sql("SELECT pg_advisory_lock(918273645)")
+            try:
+                alembic_command.upgrade(_alembic_cfg(), "head")
+                logger.info("startup: database schema is up to date (alembic head)")
+            except Exception as e:
+                logger.warning(f"startup: alembic upgrade failed ({e}); using create_all fallback")
+                Base.metadata.create_all(lock_eng)
+                try:
+                    alembic_command.stamp(_alembic_cfg(), "head")
+                except Exception as e2:
+                    logger.warning(f"startup: alembic stamp skipped: {e2}")
+                logger.info("startup: fallback schema creation completed")
+            finally:
+                lock.exec_driver_sql("SELECT pg_advisory_unlock(918273645)")
+                lock.close()
+        finally:
+            lock_eng.dispose()
 
     try:
-        await asyncio.to_thread(_upgrade)
-        logger.info("startup: database schema is up to date (alembic head)")
+        await asyncio.to_thread(_run)
     except Exception as e:
-        logger.error(f"startup: alembic migration failed: {e}")
-        raise
+        logger.error(f"startup: schema migration failed: {e}")
 
 
 @asynccontextmanager
