@@ -56,17 +56,7 @@ export function LoginPage({ onLogin }) {
     <div style={{ minHeight: "100vh", background: `linear-gradient(135deg,${T.navy} 0%,#3D378C 100%)`, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div className="login-card" style={{ width: 420, background: "#fff", borderRadius: 20, padding: 36, boxShadow: "0 24px 80px rgba(0,0,0,.25)" }}>
         <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 16 }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 22, color: T.navy, letterSpacing: 1 }}>ADROIT</div>
-              <div style={{ fontSize: 9, color: T.text2, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase" }}>Industries</div>
-            </div>
-            <div style={{ width: 1.5, height: 36, background: T.border, borderRadius: 2 }} />
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 22, color: T.amber, letterSpacing: 1 }}>SIGNET</div>
-              <div style={{ fontSize: 9, color: T.text2, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase" }}>Industries</div>
-            </div>
-          </div>
+          <img src="/logo.svg" alt="Adroit Industries × Signet Industries" style={{ display: "block", margin: "0 auto 16px", width: 230, maxWidth: "80%", height: "auto" }} />
           <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 18, color: T.navy, lineHeight: 1.2 }}>Task Management System</div>
           <div style={{ fontSize: 11, color: T.text2, marginTop: 6 }}>Decentralized Work Management Platform</div>
         </div>

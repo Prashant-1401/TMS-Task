@@ -41,12 +41,12 @@ export function Shell({ children, page, setPage, user, onLogout, onQuickAdd, _pe
       {mobileMenuOpen && <div className="mbl-overlay show" onClick={() => setMobileMenuOpen(false)} />}
       <aside className={`app-sidebar${mobileMenuOpen ? " open" : ""}`} style={{ width: 228, background: T.navy, color: "#fff", display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh" }}>
         <div style={{ padding: "20px 18px 16px", borderBottom: "1px solid rgba(255,255,255,.1)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: T.amber, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 12, flexShrink: 0 }}>TMS</div>
-            <div>
-              <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 11, lineHeight: 1.1 }}>Task Management System</div>
-              <div style={{ fontSize: 9, color: T.amber, letterSpacing: 1.5, textTransform: "uppercase", marginTop: 2, fontWeight: 700 }}>Tasks</div>
-            </div>
+          <div style={{ background: "#fff", borderRadius: 10, padding: "8px 10px", display: "flex", justifyContent: "center", marginBottom: 10 }}>
+            <img src="/logo.svg" alt="Adroit × Signet" style={{ display: "block", width: "100%", maxWidth: 150, height: "auto" }} />
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 11, lineHeight: 1.1 }}>Task Management System</div>
+            <div style={{ fontSize: 9, color: T.amber, letterSpacing: 1.5, textTransform: "uppercase", marginTop: 2, fontWeight: 700 }}>Tasks</div>
           </div>
         </div>
         <nav style={{ padding: "14px 10px", flex: 1 }}>
