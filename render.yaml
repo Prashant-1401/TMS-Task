@@ -80,7 +80,6 @@ services:
   - type: web
     name: tms-frontend
     runtime: static
-    plan: free
     rootDir: .
     buildCommand: npm install && npm run build
     staticPublishPath: dist
@@ -93,6 +92,8 @@ services:
         name: Cache-Control
         value: public, max-age=31536000, immutable
     envVars:
+      - key: NODE_VERSION
+        value: "22.11.0"
       - key: VITE_API_BASE_URL
         value: https://tms-backend.onrender.com
       - key: VITE_SENTRY_DSN
