@@ -20,6 +20,9 @@ if _db_url.startswith("postgres://"):
     _db_url = _db_url.replace("postgres://", "postgresql://", 1)
 if _db_url.startswith("postgresql://"):
     _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+# asyncpg doesn't understand libpq's sslmode param — translate it (e.g. Neon URLs
+# ship with ?sslmode=require, which asyncpg rejects as an unknown DSN parameter).
+_db_url = _db_url.replace("sslmode=", "ssl=")
 
 engine = create_async_engine(
     _db_url,
