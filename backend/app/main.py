@@ -35,7 +35,7 @@ setup_logging(settings.log_level)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("starting", extra={"message": "startup: verifying database connectivity"})
+    logger.info("startup: verifying database connectivity")
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
