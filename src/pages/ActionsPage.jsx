@@ -4,6 +4,7 @@ import { apiRemove, apiUpdate } from "../api/autosave.js";
 import { apiPost } from "../api/client.js";
 import { ActionDetailPanel } from "../components/ActionDetailPanel.jsx";
 import { Lbl, PageHeader } from "../components/ui.jsx";
+import { ExcelIO } from "../components/ExcelIO.jsx";
 import { BoardView, KanbanView, TableView, TimelineView } from "../components/views.jsx";
 import { PRIORITY_LIST, STATUS_LIST, displayStatus, saveFilterPref, userFilterPref, userSortPref, userViewPref } from "../utils/constants.js";
 import { normalizeActionPatch, resolveRecordIds, responsibleMatchesUsers } from "../utils/data.js";
@@ -173,6 +174,7 @@ export function ActionsPage({ actions, setActions, plants, depts, users, user, p
           <button className="btn btn-ghost btn-sm" onClick={exportPDF} title="Download PDF">📄 PDF</button>
           <button className="btn btn-ghost btn-sm" onClick={printPage} title="Print">🖨 Print</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setEmailModal(true)} title="Email Actions" style={{ color: T.navy }}>✉ Email</button>
+          <ExcelIO kind="actions" onImported={fetchData} />
         </div>
       </PageHeader>
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>

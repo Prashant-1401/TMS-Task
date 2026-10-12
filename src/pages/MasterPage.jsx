@@ -4,6 +4,7 @@ import { apiCreate, apiRemove, apiUpdate } from "../api/autosave.js";
 import { apiPost } from "../api/client.js";
 import { EscMatrixTab } from "../components/EscMatrixTab.jsx";
 import { Avatar, Empty, HR, Lbl, PageHeader, SectionSaveButton } from "../components/ui.jsx";
+import { ExcelIO } from "../components/ExcelIO.jsx";
 import { useEscClose } from "../hooks/useEscClose.js";
 import { TeamPage } from "../pages/TeamPage.jsx";
 import { MEETING_TYPES } from "../utils/constants.js";
@@ -161,6 +162,9 @@ export function MasterPage({ user, plants, setPlants, depts, setDepts, users, se
           onAdd={() => openAdd("users")}
           onSave={() => saveToAPI("Users", mUsers)}
         />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <ExcelIO kind="users" onImported={_refreshMaster} />
+        </div>
         {(() => {
           const uPlants = Array.from(new Set(mUsers.map(u => u.plant).filter(Boolean))).sort();
           const uRoles = Array.from(new Set(mUsers.map(u => u.role).filter(Boolean))).sort();

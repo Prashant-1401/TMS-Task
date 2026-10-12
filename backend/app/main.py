@@ -20,9 +20,9 @@ from app.middleware.observability import (
     setup_logging,
 )
 from app.routers import (
-    actions, audit, auth, departments, email_share, escalation, machines,
-    meetings, meetings_ai, plants, projects, reasons, roles, sessions,
-    translate, users,
+    actions, audit, auth, departments, email_share, escalation, excel,
+    machines, meetings, meetings_ai, plants, projects, reasons, roles,
+    sessions, translate, users,
 )
 
 logger = logging.getLogger("tms.main")
@@ -173,3 +173,5 @@ app.include_router(meetings_ai.router)
 app.include_router(translate.router)
 app.include_router(email_share.router)
 app.include_router(sessions.router)
+app.include_router(excel.actions_excel)
+app.include_router(excel.users_excel)
