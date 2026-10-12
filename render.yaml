@@ -8,7 +8,7 @@ services:
     name: tms-backend
     runtime: python
     region: singapore
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 2 --bind 0.0.0.0:$PORT --timeout 60 --keep-alive 5 --graceful-timeout 30
@@ -19,10 +19,9 @@ services:
         value: "3.12.3"
       # REQUIRED — set from the tms-db database below (sync URL is fine; the
       # app converts to the asyncpg driver automatically)
+      # Set in Dashboard: your Neon (or any Postgres) connection string.
       - key: DATABASE_URL
-        fromDatabase:
-          name: tms-db
-          property: connectionString
+        sync: false
       # REQUIRED — strong JWT secret; do NOT use the generated placeholder forever.
       - key: SECRET_KEY
         generateValue: true   # or set manually: openssl rand -hex 32
@@ -99,10 +98,3 @@ services:
       - key: VITE_SENTRY_DSN
         sync: false
       # NOTE: VITE_API_KEY is REMOVED — auth is JWT-only.
-
-databases:
-  - name: tms-db
-    plan: starter
-    databaseName: tmsdb
-    user: tms
-    region: singapore
