@@ -1,3 +1,4 @@
+import re
 """Async SQLAlchemy engine — Postgres only, with proper pooling."""
 import logging
 
@@ -23,6 +24,11 @@ if _db_url.startswith("postgresql://"):
 # asyncpg doesn't understand libpq's sslmode param — translate it (e.g. Neon URLs
 # ship with ?sslmode=require, which asyncpg rejects as an unknown DSN parameter).
 _db_url = _db_url.replace("sslmode=", "ssl=")
+# libpq-only params asyncpg doesn't support as DSN options — strip them
+# (Neon appends ?channel_binding=require, which asyncpg rejects).
+for _pq_param in ("channel_binding", "passfile", "hostaddr", "gssencmode"):
+    _db_url = re.sub(rf"[?&]{_pq_param}=[^&]*", "", _db_url)
+_db_url = _db_url.rstrip("?")
 
 engine = create_async_engine(
     _db_url,
