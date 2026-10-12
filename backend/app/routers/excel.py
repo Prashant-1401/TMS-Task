@@ -244,7 +244,7 @@ async def import_users(
 
     plants = {p.name: p.id for p in (await db.execute(select(Plant))).scalars() if p.name}
     depts = {d.name: d.id for d in (await db.execute(select(Department))).scalars() if d.name}
-    existing = {u.username for u in (await db.execute(select(User.username))).scalars()}
+    existing = set((await db.execute(select(User.username))).scalars())
 
     created, updated, errors = 0, 0, []
     for idx, r in enumerate(rows[1:], start=2):
