@@ -94,7 +94,7 @@ services:
       - key: NODE_VERSION
         value: "22.11.0"
       - key: VITE_API_BASE_URL
-        value: https://tms-backend.onrender.com
+        value: https://tms-backend-2nf1.onrender.com
       - key: VITE_SENTRY_DSN
         sync: false
       # NOTE: VITE_API_KEY is REMOVED — auth is JWT-only.
