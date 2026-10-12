@@ -34,7 +34,7 @@ services:
       - key: JWT_EXPIRE_MINUTES
         value: "480"
       - key: ALLOWED_ORIGINS
-        value: https://tms-task-mangement-system.vercel.app,http://localhost:5173
+        value: https://tms-frontend-0atu.onrender.com,http://localhost:5173
       - key: FRONTEND_URL
         value: https://tms-task-mangement-system.vercel.app
       # ── Object storage (Cloudflare R2 / S3-compatible) — set in Dashboard ──
